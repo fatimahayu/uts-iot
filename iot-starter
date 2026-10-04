@@ -1,0 +1,272 @@
+//STARTER CODE BUAT MATA KULIAH IOT BUATAN FATIMAH AYU K3BB
+//pokoknya nanti tinggal pake fuction2 yang ada buat setup, kirim data, baca data, dan lainnya
+
+//--------------------------- LIBRARY ---------------------------------
+//list library yang kemungkinan dipake
+//basic library
+#include <Arduino.h>
+#include <Wire.h>
+//buat iot nya
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+//buat servo
+#include <ESP32Servo.h>
+//buat lcd
+#include <LiquidCrystal_I2C.h>
+//buat oled
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+//buat sensor bh1750
+#include <BH1750.h>
+
+//--------------------------- SETUP DEFINE DI AWAL --------------------------
+//setup pin
+#define led 2
+#define buzzer 25
+#define relay 26
+#define button 19
+#define pot 34
+#define servoPin 23
+#define trig 5
+#define echo 18
+
+//setup wifi
+#define ssid "Aneh Tapi Sayang" //ssid wifiku
+#define password "familysepedabaruku111" //password wifi
+
+//setup firebase
+#define host "https://iot-kit-908b8-default-rtdb.firebaseio.com" //link database firebase
+#define path1 "/fatim_ayu/switch1.json" //path untuk switch 1
+// #define path2 "/fatim_ayu/switch2.json" //path untuk switch 2
+// #define path3 "/fatim_ayu/switch3.json" //path untuk switch 3
+
+//setup thingspeak
+#define api_key "GUDRZZGCWU93D8IF" //write api key thingspeak
+#define field1 1 //field berapa di thingspeak
+// #define field2 2 //field berapa di thingspeak
+// #define field3 3//field berapa di thingspeak
+unsigned long lastThingSpeakUpdate = 0; //variabel waktu terakhir data dikirim
+const unsigned long thingspeak_interval = 15000; //ini interval pengiriman data 15s
+
+//---------------------------- LIST OBJEK -----------------------------------
+Servo servo; //objek servo
+Adafruit_SSD1306 oled(128,64, &Wire, -1); //objek dan setup oled
+LiquidCrystal_I2C lcd(0x27, 16, 2); //objek dan setup lcd
+WiFiClientSecure client; //objek client buat koneksi HTTPS
+HTTPClient http; //objek http client buat kirim dan terima request http
+BH1750 lightMeter; //objek untuk baca cahaya dari BH1750
+
+// ---------------------------------- BACA SWITCH FIREBASE ---------------------------------
+//function type integer namun readFirebaseSwitch buat lihat state dari firebase
+int readFirebaseSwitch(String path) {
+  if (WiFi.status() == WL_CONNECTED) {
+    String url = String(host) + String(path);
+    client.setInsecure(); //setting biar http ga usah pake sertifikasi https
+    http.begin(client, url); //konek http pakai client ke url firebase
+    int httpCode = http.GET(); //kirim GET request untuk ambil data dari Firebase
+
+    if (httpCode == HTTP_CODE_OK) {
+      String payload = http.getString(); //ambil data switch yang dikirim firebase
+      http.end(); //tutup koneksi http
+
+      //olah data dari firebase, kalo true maka kasih value 1, kalo false kasih value 0
+      payload.trim();
+
+      if (payload == "true") {
+        return 1;
+      }
+      if (payload == "false") {
+        return 0;
+      }
+    }
+
+    http.end();
+  }
+  return 0; //kalo gagal baca firebase dianggap OFF
+}
+
+// ----------------------------- CEK KONEKSI FIREBASE ------------------------------------
+//function cekFirebase() untuk mengecek koneksi Firebase
+void cekFirebase() {
+  client.setInsecure(); //membuat koneksi HTTPS tanpa verifikasi sertifikat
+  String url = String(host) + String(path1); //URL Firebase yang ingin dicek, bisa ganti path sesuai kebutuhan
+
+  Serial.println();
+  Serial.println("Checking Firebase...");
+  Serial.print("URL: ");
+  Serial.println(url);
+
+  http.begin(client, url); //mulai koneksi ke Firebase
+
+  int httpCode = http.GET(); //kirim request GET
+
+  Serial.print("Firebase HTTP Code: ");
+  Serial.println(httpCode);
+
+  if (httpCode == HTTP_CODE_OK) { //kalo mendapat HTTP 200 berarti berhasil
+    String payload = http.getString(); //ambil data dari Firebase
+    Serial.print("Firebase Response: ");
+    Serial.println(payload);
+    Serial.println("Firebase CONNECTED!");
+  } 
+  else {
+    Serial.println("Firebase CONNECTION FAILED!");
+  }
+
+  http.end(); //tutup koneksi HTTP
+}
+
+//------------------------------ KIRIM DATA KE THINGSPEAK -----------------------------------------
+//function buat kirim data ke field tertentu di ThingSpeak
+//nanti panggil aja fuctionnya dengan parameter )filed-berapa, data-yg-dibaca)
+void kirimThingSpeak(int field, float data) {
+
+  if (WiFi.status() == WL_CONNECTED) { //cek apakah ESP32 terhubung WiFi
+
+    String url = "http://api.thingspeak.com/update?api_key="
+                 + String(api_key)
+                 + "&field"
+                 + String(field)
+                 + "="
+                 + String(data); //buat URL pengiriman data
+
+    http.begin(url); //mulai koneksi ke ThingSpeak
+    int httpCode = http.GET(); //kirim data menggunakan request GET
+
+    Serial.print("ThingSpeak HTTP Code: ");
+    Serial.println(httpCode);
+
+    if (httpCode == HTTP_CODE_OK) { //kalo request berhasil
+      String response = http.getString(); //ambil response dari ThingSpeak
+      Serial.print("ThingSpeak Response: ");
+      Serial.println(response);
+      Serial.println("Data berhasil dikirim!");
+    } 
+    else {
+      Serial.println("Gagal mengirim data!");
+    }
+
+    http.end(); //tutup koneksi HTTP
+  }
+}
+
+//------------------------------ BACA SENSOR ANALOG -----------------------------------------
+//function buat baca nilai analog, nanti bisa dipake buat LDR/pot/photodiode
+int bacaAnalog(int pin) {
+  int nilai = analogRead(pin); //baca nilai ADC dari pin
+  return nilai; //balikin nilai ADC
+}
+
+//------------------------------ BACA BH1750 -----------------------------------------
+//function buat baca nilai cahaya dalam lux
+float bacaBH1750() {
+  float lux = lightMeter.readLightLevel(); //baca intensitas cahaya dalam lux
+  return lux; //balikin nilai lux
+}
+
+//------------------------------ SETUP OLED -----------------------------------------
+//function setup OLED biar setup() ga terlalu rame
+void setupOLED() {
+  if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED gagal init!");
+  } 
+  else {
+    Serial.println("OLED berhasil init!");
+  }
+}
+
+//------------------------------ SETUP LCD -----------------------------------------
+//function setup LCD
+void setupLCD() {
+  lcd.init(); //inisialisasi LCD
+  lcd.backlight(); //nyalain backlight
+  lcd.setCursor(0, 0);
+  lcd.print("IoT ON");
+}
+
+//------------------------------ SETUP SERVO -----------------------------------------
+//function setup servo
+void setupServo() {
+  servo.setPeriodHertz(50); //frekuensi servo 50 Hz
+  servo.attach(servoPin, 500, 2400); //servo dipasang ke pin yang ditentukan
+  servo.write(90); //posisi awal servo 90 derajat
+}
+
+//------------------------------ SETUP BH1750 -----------------------------------------
+//function setup sensor BH1750
+void setupBH1750() {
+  if (lightMeter.begin()) {
+    Serial.println("BH1750 berhasil init!");
+  } 
+  else {
+    Serial.println("BH1750 gagal init!");
+  }
+}
+
+// ------------------------------ VOID SETUP -------------------------------------------
+void setup() {
+  Serial.begin(115200);
+
+  //koneksi wifi
+  WiFi.begin(ssid,password);
+
+  while(WiFi.status() != WL_CONNECTED){
+    delay(500);
+    Serial.print(".");
+  }
+
+  //kalau konek bisa lanjut print
+  Serial.println();
+  Serial.println("WiFi konek bro, alhamdulillah");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+  //setup I2C
+  Wire.begin(21,22); //SDA = 21, SCL = 22
+  //cek koneksi firebase
+  cekFirebase();
+  //setup oled
+  setupOLED();
+  //setup lcd
+  setupLCD();
+  //setup servo
+  setupServo();
+  //setup BH1750
+  setupBH1750();
+
+  //setup pin digital
+  pinMode(led,OUTPUT);
+  pinMode(buzzer,OUTPUT);
+  pinMode(relay,OUTPUT);
+  pinMode(button,INPUT_PULLUP);
+
+  //setup pin analog
+  pinMode(pot,INPUT);
+
+  Serial.println();
+  Serial.println("IoT STARTER SIAP");
+}
+
+// ------------------------------- VOID LOOP -------------------------------------
+void loop() {
+  //program utama nanti ditaruh disini
+
+  //CONTOH doang ni nyalaiin led
+  int switch1 = readFirebaseSwitch(path1);
+  //nyalain led berdasarkan vlue switch
+  if(switch1 == 1){
+    digitalWrite(led,HIGH);
+    Serial.println("led nyala");
+  }else{
+    digitalWrite(led, LOW);
+    Serial.println("led mati");
+  }
+
+  //kirim status led ke thingspeak
+  if (millis() - lastThingSpeakUpdate >= thingspeak_interval) {
+    kirimThingSpeak(field1, switch1);
+    lastThingSpeakUpdate = millis();
+  }
+
+  delay(500);
+}
