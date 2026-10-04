@@ -32,17 +32,17 @@
 #define echo 18
 
 //setup wifi
-#define ssid "Aneh Tapi Sayang" //ssid wifiku
-#define password "familysepedabaruku111" //password wifi
+#define ssid "SSID WIFI" //ssid wifiku
+#define password "PASS WIFI" //password wifi
 
 //setup firebase
-#define host "https://iot-kit-908b8-default-rtdb.firebaseio.com" //link database firebase
-#define path1 "/fatim_ayu/switch1.json" //path untuk switch 1
-// #define path2 "/fatim_ayu/switch2.json" //path untuk switch 2
-// #define path3 "/fatim_ayu/switch3.json" //path untuk switch 3
+#define host "https://blbalblabla.firebaseio.com" //link database firebase
+#define path1 "/uname/switch1.json" //path untuk switch 1
+// #define path2 "/uname/switch2.json" //path untuk switch 2
+// #define path3 "/uname/switch3.json" //path untuk switch 3
 
 //setup thingspeak
-#define api_key "GUDRZZGCWU93D8IF" //write api key thingspeak
+#define api_key "apikeyblablbalblabl" //write api key thingspeak
 #define field1 1 //field berapa di thingspeak
 // #define field2 2 //field berapa di thingspeak
 // #define field3 3//field berapa di thingspeak
